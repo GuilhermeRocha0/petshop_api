@@ -146,17 +146,17 @@ app.post('/auth/login', async (req, res) => {
 })
 
 // Update User
-app.put('/user/:id', checkToken, async (req, res) => {
-  const id = req.params.id
+app.put('/user/edit', checkToken, async (req, res) => {
+  const id = req.userId // vem do token
   const { name, email } = req.body
 
   // validations
-  if (!email) {
-    return res.status(422).json({ msg: 'O email é obrigatório!' })
+  if (!name) {
+    return res.status(422).json({ msg: 'O nome é obrigatório!' })
   }
 
-  if (!password) {
-    return res.status(422).json({ msg: 'A senha é obrigatória!' })
+  if (!email) {
+    return res.status(422).json({ msg: 'O email é obrigatório!' })
   }
 
   try {

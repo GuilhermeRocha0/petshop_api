@@ -11,7 +11,9 @@ function checkToken(req, res, next) {
   try {
     const secret = process.env.secret
 
-    jwt.verify(token, secret)
+    const decoded = jwt.verify(token, secret)
+
+    req.userId = decoded.id // adiciona o ID do usuário na requisição
 
     next()
   } catch (error) {
