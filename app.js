@@ -145,6 +145,50 @@ app.post('/auth/login', async (req, res) => {
   }
 })
 
+// Update User
+app.put('/user/:id', checkToken, async (req, res) => {
+  const id = req.params.id
+  const { name, email } = req.body
+
+  // validations
+  if (!email) {
+    return res.status(422).json({ msg: 'O email é obrigatório!' })
+  }
+
+  if (!password) {
+    return res.status(422).json({ msg: 'A senha é obrigatória!' })
+  }
+
+  try {
+    // check if user exists
+    const user = await User.findById(id, '-password -cpf')
+
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuário não encontrado!' })
+    }
+
+    // update user data
+    user.name = name
+    user.email = email
+
+    const updatedUser = await user.save()
+
+    return res.status(200).json({
+      msg: 'Usuário atualizado com sucesso!',
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email
+      }
+    })
+  } catch (error) {
+    console.log(error)
+    return res
+      .status(500)
+      .json({ msg: 'Ocorreu um erro no servidor, tente novamente mais tarde!' })
+  }
+})
+
 // Credentials
 const dbUser = process.env.DB_USER
 const dbPassword = process.env.DB_PASS
