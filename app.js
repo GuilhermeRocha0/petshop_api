@@ -41,6 +41,7 @@ app.get('/user/:id', checkToken, (req, res) => {
 app.post('/auth/register', async (req, res) => {
   const { name, email, password, confirmPassword } = req.body
   let { cpf } = req.body
+  const role = 'CUSTOMER'
 
   // validations
   if (!name) {
@@ -84,7 +85,8 @@ app.post('/auth/register', async (req, res) => {
     name,
     cpf,
     email,
-    password: passwordHash
+    password: passwordHash,
+    role
   })
 
   try {
