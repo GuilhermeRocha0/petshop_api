@@ -3,8 +3,11 @@ const express = require('express')
 const mongoose = require('mongoose')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
+const cors = require('cors')
 
 const app = express()
+
+app.use(cors())
 
 // Config JSON response
 app.use(express.json())
@@ -28,7 +31,7 @@ app.get('/user/:id', checkToken, (req, res) => {
   const id = req.params.id
 
   // check if user exists
-  User.findById(id, '-password -cpf')
+  User.findById(id, '-password')
     .then(user => {
       return res.status(200).json({ user })
     })
@@ -131,10 +134,9 @@ app.post('/auth/login', async (req, res) => {
     const secret = process.env.secret
 
     const token = jwt.sign(
-      {
-        id: user._id
-      },
-      secret
+      { id: user._id },
+      secret,
+      { expiresIn: '1h' } // token expira em 1 hora
     )
 
     res.status(200).json({ msg: 'Autenticação realizada com sucesso!', token })
@@ -151,6 +153,7 @@ app.post('/auth/login', async (req, res) => {
 app.put('/user/edit', checkToken, async (req, res) => {
   const id = req.userId // vem do token
   const { name, email } = req.body
+  let { cpf } = req.body
 
   // validations
   if (!name) {
@@ -159,6 +162,16 @@ app.put('/user/edit', checkToken, async (req, res) => {
 
   if (!email) {
     return res.status(422).json({ msg: 'O email é obrigatório!' })
+  }
+
+  if (!cpf) {
+    return res.status(422).json({ msg: 'O CPF é obrigatório!' })
+  }
+
+  // check if cpf is valid
+  cpf = cpf.replace(/[^\d]+/g, '')
+  if (!isValidCPF(cpf)) {
+    return res.status(422).json({ msg: 'CPF inválido, utilize um CPF válido!' })
   }
 
   try {
