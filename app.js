@@ -204,6 +204,46 @@ app.put('/user/edit', checkToken, async (req, res) => {
   }
 })
 
+// Updata password
+app.put('/user/change-password', checkToken, async (req, res) => {
+  const { currentPassword, newPassword, confirmNewPassword } = req.body
+  const id = req.userId // vem do token
+
+  if (!currentPassword || !newPassword || !confirmNewPassword) {
+    return res.status(422).json({ msg: 'Preencha todos os campos!' })
+  }
+
+  if (newPassword !== confirmNewPassword) {
+    return res.status(422).json({ msg: 'As novas senhas não conferem!' })
+  }
+
+  try {
+    const user = await User.findById(id)
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuário não encontrado!' })
+    }
+
+    const isPasswordCorrect = await bcrypt.compare(
+      currentPassword,
+      user.password
+    )
+    if (!isPasswordCorrect) {
+      return res.status(401).json({ msg: 'Senha atual incorreta!' })
+    }
+
+    const salt = await bcrypt.genSalt(12)
+    const passwordHash = await bcrypt.hash(newPassword, salt)
+
+    user.password = passwordHash
+    await user.save()
+
+    return res.status(200).json({ msg: 'Senha alterada com sucesso!' })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro no servidor!' })
+  }
+})
+
 // Credentials
 const dbUser = process.env.DB_USER
 const dbPassword = process.env.DB_PASS
