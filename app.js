@@ -20,6 +20,8 @@ const Appointment = require('./models/Appointment')
 
 // Utilites
 const isValidCPF = require('./utilities/isValidCPF')
+const isValidEmail = require('./utilities/isValidEmail')
+const isValidPassword = require('./utilities/isValidPassword')
 
 // Middlewares
 const checkToken = require('./middlewares/checkToken')
@@ -64,8 +66,20 @@ app.post('/auth/register', async (req, res) => {
     return res.status(422).json({ msg: 'O email é obrigatório!' })
   }
 
+  // Validate email format
+  if (!isValidEmail(email)) {
+    return res.status(422).json({ msg: 'Email inválido!' })
+  }
+
   if (!password) {
     return res.status(422).json({ msg: 'A senha é obrigatória!' })
+  }
+
+  // Validate password strength
+  if (!isValidPassword(password)) {
+    return res.status(422).json({
+      msg: 'A senha deve ter pelo menos 8 caracteres, uma letra maiúscula, uma minúscula, um número e um caractere especial!'
+    })
   }
 
   if (password !== confirmPassword) {
@@ -220,6 +234,13 @@ app.put('/user/change-password', checkToken, async (req, res) => {
 
   if (newPassword !== confirmNewPassword) {
     return res.status(422).json({ msg: 'As novas senhas não conferem!' })
+  }
+
+  // Validate new password strength
+  if (!isValidPassword(newPassword)) {
+    return res.status(422).json({
+      msg: 'A senha deve ter pelo menos 8 caracteres, uma letra maiúscula, uma minúscula, um número e um caractere especial!'
+    })
   }
 
   try {
