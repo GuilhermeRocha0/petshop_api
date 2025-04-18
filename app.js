@@ -14,12 +14,17 @@ app.use(express.json())
 
 // Models
 const User = require('./models/User')
+const Pet = require('./models/Pet')
+const Service = require('./models/Service')
+const Appointment = require('./models/Appointment')
 
 // Utilites
 const isValidCPF = require('./utilities/isValidCPF')
 
 // Middlewares
 const checkToken = require('./middlewares/checkToken')
+const checkAdmin = require('./middlewares/checkAdmin')
+const checkAdminOrEmployee = require('./middlewares/checkAdminOrEmployee')
 
 // Open Route - Public Route
 app.get('/', (req, res) => {
@@ -131,7 +136,7 @@ app.post('/auth/login', async (req, res) => {
   }
 
   try {
-    const secret = process.env.secret
+    const secret = process.env.SECRET
 
     const token = jwt.sign(
       { id: user._id },
@@ -204,7 +209,7 @@ app.put('/user/edit', checkToken, async (req, res) => {
   }
 })
 
-// Updata password
+// Update password
 app.put('/user/change-password', checkToken, async (req, res) => {
   const { currentPassword, newPassword, confirmNewPassword } = req.body
   const id = req.userId // vem do token
@@ -243,6 +248,401 @@ app.put('/user/change-password', checkToken, async (req, res) => {
     return res.status(500).json({ msg: 'Erro no servidor!' })
   }
 })
+
+// Register Pet
+app.post('/pets/register', checkToken, async (req, res) => {
+  const { name, size, age, breed, notes } = req.body
+  const userId = req.userId
+
+  if (!name || !size || !age || !breed) {
+    return res
+      .status(422)
+      .json({ msg: 'Todos os campos obrigatórios devem ser preenchidos!' })
+  }
+
+  if (!['pequeno', 'médio', 'grande'].includes(size)) {
+    return res
+      .status(422)
+      .json({ msg: 'Porte inválido! Use: pequeno, médio ou grande.' })
+  }
+
+  const pet = new Pet({
+    userId,
+    name,
+    size,
+    age,
+    breed,
+    notes
+  })
+
+  try {
+    await pet.save()
+    res.status(201).json({ msg: 'Pet cadastrado com sucesso!', pet })
+  } catch (error) {
+    console.log(error)
+    res.status(500).json({ msg: 'Erro ao cadastrar o pet!' })
+  }
+})
+
+// Show Pet
+app.get('/pets', checkToken, async (req, res) => {
+  const userId = req.userId
+
+  try {
+    const pets = await Pet.find({ userId })
+
+    if (!pets || pets.length === 0) {
+      return res.status(404).json({ msg: 'Nenhum pet encontrado!' })
+    }
+
+    return res.status(200).json({ pets })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao buscar os pets!' })
+  }
+})
+
+// Update Pet
+app.put('/pets/:id/edit', checkToken, async (req, res) => {
+  const petId = req.params.id
+  const userId = req.userId
+  const { name, size, age, breed, notes } = req.body
+
+  if (!name || !size || !age || !breed) {
+    return res
+      .status(422)
+      .json({ msg: 'Todos os campos obrigatórios devem ser preenchidos!' })
+  }
+
+  if (!['pequeno', 'médio', 'grande'].includes(size)) {
+    return res
+      .status(422)
+      .json({ msg: 'Porte inválido! Use: pequeno, médio ou grande.' })
+  }
+
+  try {
+    // Verifica se o pet existe e pertence ao usuário
+    const pet = await Pet.findOne({ _id: petId, userId })
+
+    if (!pet) {
+      return res
+        .status(404)
+        .json({ msg: 'Pet não encontrado ou não pertence a este usuário!' })
+    }
+
+    pet.name = name
+    pet.size = size
+    pet.age = age
+    pet.breed = breed
+    pet.notes = notes
+
+    await pet.save()
+
+    return res.status(200).json({ msg: 'Pet atualizado com sucesso!', pet })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao atualizar o pet!' })
+  }
+})
+
+// Delete Pet
+app.delete('/pets/:id', checkToken, async (req, res) => {
+  const { id } = req.params
+
+  try {
+    const pet = await Pet.findOne({ _id: id, userId: req.userId })
+    if (!pet) {
+      return res.status(404).json({ msg: 'Pet não encontrado!' })
+    }
+
+    await Pet.deleteOne({ _id: id })
+    return res.status(200).json({ msg: 'Pet deletado com sucesso!' })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao deletar pet!' })
+  }
+})
+
+// Register Service
+app.post('/services/register', checkToken, checkAdmin, async (req, res) => {
+  const { name, price, estimatedTime } = req.body
+
+  if (!name || !price || !estimatedTime) {
+    return res
+      .status(422)
+      .json({ msg: 'Preencha todos os campos obrigatórios!' })
+  }
+
+  const service = new Service({
+    name,
+    price,
+    estimatedTime
+  })
+
+  try {
+    await service.save()
+    return res
+      .status(201)
+      .json({ msg: 'Serviço cadastrado com sucesso!', service })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao cadastrar o serviço!' })
+  }
+})
+
+// Show Services
+app.get('/services', async (req, res) => {
+  try {
+    const services = await Service.find()
+
+    if (!services || services.length === 0) {
+      return res.status(404).json({ msg: 'Nenhum serviço encontrado!' })
+    }
+
+    return res.status(200).json({ services })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao buscar os serviços!' })
+  }
+})
+
+// Update Service
+app.put('/services/:id', checkToken, checkAdmin, async (req, res) => {
+  const serviceId = req.params.id
+  const { name, price, estimatedTime } = req.body
+
+  if (!name || !price || !estimatedTime) {
+    return res
+      .status(422)
+      .json({ msg: 'Preencha todos os campos obrigatórios!' })
+  }
+
+  try {
+    const service = await Service.findById(serviceId)
+
+    if (!service) {
+      return res.status(404).json({ msg: 'Serviço não encontrado!' })
+    }
+
+    service.name = name
+    service.price = price
+    service.estimatedTime = estimatedTime
+
+    await service.save()
+
+    return res
+      .status(200)
+      .json({ msg: 'Serviço atualizado com sucesso!', service })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao atualizar o serviço!' })
+  }
+})
+
+// Delete Service
+app.delete('/services/:id', checkToken, checkAdmin, async (req, res) => {
+  const serviceId = req.params.id
+
+  try {
+    const service = await Service.findByIdAndDelete(serviceId)
+
+    if (!service) {
+      return res.status(404).json({ msg: 'Serviço não encontrado!' })
+    }
+
+    return res.status(200).json({ msg: 'Serviço excluído com sucesso!' })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao excluir o serviço!' })
+  }
+})
+
+// Show All Appointments
+app.get(
+  '/appointments/all',
+  checkToken,
+  checkAdminOrEmployee,
+  async (req, res) => {
+    try {
+      const appointments = await Appointment.find().sort({ scheduledDate: 1 })
+
+      if (appointments.length === 0) {
+        return res.status(404).json({ msg: 'Nenhum agendamento encontrado!' })
+      }
+
+      return res.status(200).json({ appointments })
+    } catch (error) {
+      console.log(error)
+      return res.status(500).json({ msg: 'Erro ao buscar agendamentos!' })
+    }
+  }
+)
+
+// Show User Appointments
+app.get('/appointments', checkToken, async (req, res) => {
+  try {
+    const appointments = await Appointment.find({ userId: req.userId }).sort({
+      scheduledDate: 1
+    })
+
+    if (appointments.length === 0) {
+      return res.status(404).json({ msg: 'Nenhum agendamento encontrado!' })
+    }
+
+    return res.status(200).json({ appointments })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao buscar agendamentos!' })
+  }
+})
+
+// Register Appointment
+app.post('/appointments', checkToken, async (req, res) => {
+  const { petId, serviceIds, scheduledDate } = req.body
+
+  if (!petId || !serviceIds || !scheduledDate) {
+    return res
+      .status(422)
+      .json({ msg: 'Preencha todos os campos obrigatórios!' })
+  }
+
+  try {
+    // Valida o pet
+    const pet = await Pet.findOne({ _id: petId, userId: req.userId })
+    if (!pet) {
+      return res.status(404).json({ msg: 'Pet não encontrado!' })
+    }
+
+    // Busca os serviços selecionados
+    const services = await Service.find({ _id: { $in: serviceIds } })
+    if (services.length !== serviceIds.length) {
+      return res
+        .status(404)
+        .json({ msg: 'Um ou mais serviços não encontrados!' })
+    }
+
+    // Calcula o total de preço e tempo
+    const totalPrice = services.reduce((acc, s) => acc + s.price, 0)
+    const totalEstimatedTime = services.reduce(
+      (acc, s) => acc + s.estimatedTime,
+      0
+    )
+
+    // Cria a lista de serviços para o agendamento
+    const fixedServices = services.map(s => ({
+      name: s.name,
+      price: s.price,
+      estimatedTime: s.estimatedTime
+    }))
+
+    // Cria o agendamento com o status padrão "pendente"
+    const appointment = new Appointment({
+      userId: req.userId,
+      pet: {
+        petId: pet._id,
+        name: pet.name,
+        size: pet.size,
+        age: pet.age,
+        breed: pet.breed,
+        notes: pet.notes
+      },
+      services: fixedServices,
+      scheduledDate,
+      totalPrice,
+      totalEstimatedTime,
+      status: 'pendente' // Status padrão
+    })
+
+    await appointment.save()
+    return res
+      .status(201)
+      .json({ msg: 'Agendamento realizado com sucesso!', appointment })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao realizar o agendamento!' })
+  }
+})
+
+// Cancel Appointment
+app.put('/appointments/cancel/:id', checkToken, async (req, res) => {
+  const appointmentId = req.params.id
+
+  try {
+    // Verifica se o agendamento existe e pertence ao usuário
+    const appointment = await Appointment.findOne({
+      _id: appointmentId,
+      userId: req.userId
+    })
+
+    if (!appointment) {
+      return res.status(404).json({
+        msg: 'Agendamento não encontrado ou você não tem permissão para cancelar!'
+      })
+    }
+
+    // Verifica se o agendamento já foi cancelado
+    if (appointment.status === 'cancelado') {
+      return res
+        .status(400)
+        .json({ msg: 'Este agendamento já está cancelado!' })
+    }
+
+    // Atualiza o status para "cancelado"
+    appointment.status = 'cancelado'
+    await appointment.save()
+
+    return res
+      .status(200)
+      .json({ msg: 'Agendamento cancelado com sucesso!', appointment })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao cancelar o agendamento!' })
+  }
+})
+
+// Update appointment status (ADMIN or EMPLOYEE only)
+app.put(
+  '/appointments/status/:id',
+  checkToken,
+  checkAdminOrEmployee,
+  async (req, res) => {
+    const appointmentId = req.params.id
+    const { status } = req.body
+
+    const validStatus = ['em andamento', 'a pagar', 'concluído']
+
+    if (!validStatus.includes(status)) {
+      return res.status(400).json({
+        msg: `Status inválido! Só é permitido: ${validStatus.join(', ')}.`
+      })
+    }
+
+    try {
+      const appointment = await Appointment.findById(appointmentId)
+      if (!appointment) {
+        return res.status(404).json({ msg: 'Agendamento não encontrado!' })
+      }
+
+      if (appointment.status === 'cancelado') {
+        return res.status(403).json({
+          msg: 'Este agendamento foi cancelado e não pode ser alterado.'
+        })
+      }
+
+      appointment.status = status
+      await appointment.save()
+
+      return res
+        .status(200)
+        .json({ msg: 'Status atualizado com sucesso!', appointment })
+    } catch (error) {
+      console.log(error)
+      return res
+        .status(500)
+        .json({ msg: 'Erro ao atualizar o status do agendamento!' })
+    }
+  }
+)
 
 // Credentials
 const dbUser = process.env.DB_USER
