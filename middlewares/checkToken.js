@@ -9,7 +9,7 @@ function checkToken(req, res, next) {
   }
 
   try {
-    const secret = process.env.secret
+    const secret = process.env.SECRET
 
     const decoded = jwt.verify(token, secret)
 
