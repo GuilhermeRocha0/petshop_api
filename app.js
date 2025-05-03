@@ -17,11 +17,13 @@ const User = require('./models/User')
 const Pet = require('./models/Pet')
 const Service = require('./models/Service')
 const Appointment = require('./models/Appointment')
+const PasswordResetToken = require('./models/PasswordResetToken')
 
 // Utilites
 const isValidCPF = require('./utilities/isValidCPF')
 const isValidEmail = require('./utilities/isValidEmail')
 const isValidPassword = require('./utilities/isValidPassword')
+const sendEmail = require('./utilities/sendEmail')
 
 // Middlewares
 const checkToken = require('./middlewares/checkToken')
@@ -33,7 +35,7 @@ app.get('/', (req, res) => {
   res.status(200).json({ msg: 'Bem vindo a PetShop API' })
 })
 
-// Private Route
+// Show User Data
 app.get('/user/:id', checkToken, (req, res) => {
   const id = req.params.id
 
@@ -168,7 +170,102 @@ app.post('/auth/login', async (req, res) => {
   }
 })
 
-// Update User
+// Forgot Password
+app.post('/auth/forgot-password', async (req, res) => {
+  const { email } = req.body
+
+  if (!email) {
+    return res.status(422).json({ msg: 'O email é obrigatório!' })
+  }
+
+  const user = await User.findOne({ email })
+  if (!user) {
+    return res.status(404).json({ msg: 'Usuário não encontrado!' })
+  }
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString()
+
+  const expiresAt = new Date()
+  expiresAt.setMinutes(expiresAt.getMinutes() + 30) // código válido por 30 min
+
+  await PasswordResetToken.deleteMany({ userId: user._id }) // limpa códigos antigos
+
+  const resetToken = new PasswordResetToken({
+    userId: user._id,
+    code,
+    expiresAt
+  })
+  await resetToken.save()
+
+  await sendEmail(user.email, 'Código de recuperação', `Seu código é: ${code}`)
+
+  return res.status(200).json({ msg: 'Código enviado para seu email!' })
+})
+
+// Verify Code (to Reset Password)
+app.post('/auth/verify-code', async (req, res) => {
+  const { email, code } = req.body
+
+  if (!email || !code) {
+    return res.status(422).json({ msg: 'Email e código são obrigatórios!' })
+  }
+
+  const user = await User.findOne({ email })
+  if (!user) {
+    return res.status(404).json({ msg: 'Usuário não encontrado!' })
+  }
+
+  const token = await PasswordResetToken.findOne({
+    userId: user._id,
+    code
+  })
+
+  if (!token || token.expiresAt < new Date()) {
+    return res.status(400).json({ msg: 'Código inválido ou expirado!' })
+  }
+
+  return res.status(200).json({ msg: 'Código verificado com sucesso!' })
+})
+
+// Reset Password
+app.post('/auth/reset-password', async (req, res) => {
+  const { email, code, newPassword, confirmPassword } = req.body
+
+  if (!email || !code || !newPassword || !confirmPassword) {
+    return res.status(422).json({ msg: 'Preencha todos os campos!' })
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(422).json({ msg: 'As senhas não conferem!' })
+  }
+
+  if (!isValidPassword(newPassword)) {
+    return res.status(422).json({
+      msg: 'A senha deve conter ao menos 8 caracteres, com letra maiúscula, minúscula, número e símbolo.'
+    })
+  }
+
+  const user = await User.findOne({ email })
+  if (!user) {
+    return res.status(404).json({ msg: 'Usuário não encontrado!' })
+  }
+
+  const token = await PasswordResetToken.findOne({ userId: user._id, code })
+  if (!token || token.expiresAt < new Date()) {
+    return res.status(400).json({ msg: 'Código inválido ou expirado!' })
+  }
+
+  const salt = await bcrypt.genSalt(12)
+  const passwordHash = await bcrypt.hash(newPassword, salt)
+  user.password = passwordHash
+  await user.save()
+
+  await PasswordResetToken.deleteMany({ userId: user._id })
+
+  return res.status(200).json({ msg: 'Senha redefinida com sucesso!' })
+})
+
+// Update User (name, email, cpf)
 app.put('/user/edit', checkToken, async (req, res) => {
   const id = req.userId // vem do token
   const { name, email } = req.body
@@ -223,7 +320,7 @@ app.put('/user/edit', checkToken, async (req, res) => {
   }
 })
 
-// Update password
+// Update User (password)
 app.put('/user/change-password', checkToken, async (req, res) => {
   const { currentPassword, newPassword, confirmNewPassword } = req.body
   const id = req.userId // vem do token
@@ -305,7 +402,7 @@ app.post('/pets/register', checkToken, async (req, res) => {
   }
 })
 
-// Show Pet
+// Show all User Pets
 app.get('/pets', checkToken, async (req, res) => {
   const userId = req.userId
 
@@ -621,7 +718,7 @@ app.put('/appointments/cancel/:id', checkToken, async (req, res) => {
   }
 })
 
-// Update appointment status (ADMIN or EMPLOYEE only)
+// Update Appointment status (ADMIN or EMPLOYEE only)
 app.put(
   '/appointments/status/:id',
   checkToken,
