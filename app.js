@@ -3,6 +3,7 @@ const express = require('express')
 const mongoose = require('mongoose')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
+const Grid = require('gridfs-stream')
 const cors = require('cors')
 
 const app = express()
@@ -18,12 +19,17 @@ const Pet = require('./models/Pet')
 const Service = require('./models/Service')
 const Appointment = require('./models/Appointment')
 const PasswordResetToken = require('./models/PasswordResetToken')
+const Category = require('./models/Category')
+const Product = require('./models/Product')
 
 // Utilites
 const isValidCPF = require('./utilities/isValidCPF')
 const isValidEmail = require('./utilities/isValidEmail')
 const isValidPassword = require('./utilities/isValidPassword')
 const sendEmail = require('./utilities/sendEmail')
+
+// Conifg
+const { upload, uploadToGridFS } = require('./config/gridfs')
 
 // Middlewares
 const checkToken = require('./middlewares/checkToken')
@@ -761,6 +767,169 @@ app.put(
     }
   }
 )
+
+// Register Category
+app.post('/categories', checkToken, checkAdmin, async (req, res) => {
+  const { name } = req.body
+
+  if (!name) {
+    return res.status(422).json({ msg: 'Nome da categoria é obrigatório!' })
+  }
+
+  try {
+    const category = new Category({ name })
+    await category.save()
+
+    return res
+      .status(201)
+      .json({ msg: 'Categoria criada com sucesso!', category })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao criar categoria!' })
+  }
+})
+
+// Get Categories
+app.get('/categories', async (req, res) => {
+  try {
+    const categories = await Category.find()
+    return res.status(200).json(categories)
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao buscar categorias!' })
+  }
+})
+
+// Register Product
+app.post(
+  '/products',
+  checkToken,
+  checkAdmin,
+  upload.single('image'),
+  async (req, res) => {
+    try {
+      const { name, description, price, quantity, category } = req.body
+
+      if (!req.file) {
+        return res.status(400).json({ msg: 'Imagem do produto é obrigatória!' })
+      }
+
+      if (quantity < 0) {
+        return res
+          .status(400)
+          .json({ msg: 'Quantidade não pode ser menor que 0' })
+      }
+
+      // valida categoria
+      const categoryExists = await Category.findById(category)
+      if (!categoryExists) {
+        return res.status(404).json({ msg: 'Categoria não encontrada' })
+      }
+
+      // faz upload da imagem para o GridFS
+      const imageId = await uploadToGridFS(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype
+      )
+
+      const product = new Product({
+        name,
+        description,
+        price,
+        quantity,
+        category,
+        image: imageId.toString()
+      })
+
+      await product.save()
+
+      return res
+        .status(201)
+        .json({ msg: 'Produto criado com sucesso!', product })
+    } catch (error) {
+      console.log(error)
+      return res.status(500).json({ msg: 'Erro ao cadastrar produto' })
+    }
+  }
+)
+
+// Get Product Image
+app.get('/products/image/:id', async (req, res) => {
+  try {
+    const file = await mongoose.connection.db
+      .collection('productImages.files')
+      .findOne({ _id: new mongoose.Types.ObjectId(req.params.id) })
+
+    if (!file || !file.contentType.startsWith('image/')) {
+      return res.status(404).json({ msg: 'Imagem não encontrada' })
+    }
+
+    const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
+      bucketName: 'productImages'
+    })
+
+    const readStream = bucket.openDownloadStream(
+      new mongoose.Types.ObjectId(req.params.id)
+    )
+    res.set('Content-Type', file.contentType)
+    return readStream.pipe(res)
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao buscar imagem' })
+  }
+})
+
+// Get Products
+app.get('/products', async (req, res) => {
+  try {
+    const products = await Product.find().populate('category', 'name')
+
+    const updatedProducts = products.map(product => ({
+      _id: product._id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      quantity: product.quantity,
+      category: product.category,
+      imageUrl: `/products/image/${product.image}` // gera o link da imagem
+    }))
+
+    return res.status(200).json(updatedProducts)
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao buscar produtos' })
+  }
+})
+
+// Get Product
+app.get('/products/:id', async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id).populate(
+      'category',
+      'name'
+    )
+
+    if (!product) {
+      return res.status(404).json({ msg: 'Produto não encontrado' })
+    }
+
+    const productData = {
+      _id: product._id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      quantity: product.quantity,
+      category: product.category,
+      imageUrl: `/products/image/${product.image}`
+    }
+
+    return res.status(200).json(productData)
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao buscar produto' })
+  }
+})
 
 // Credentials
 const dbUser = process.env.DB_USER
