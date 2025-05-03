@@ -768,6 +768,17 @@ app.put(
   }
 )
 
+// Get Categories
+app.get('/categories', async (req, res) => {
+  try {
+    const categories = await Category.find()
+    return res.status(200).json(categories)
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao buscar categorias!' })
+  }
+})
+
 // Register Category
 app.post('/categories', checkToken, checkAdmin, async (req, res) => {
   const { name } = req.body
@@ -789,14 +800,29 @@ app.post('/categories', checkToken, checkAdmin, async (req, res) => {
   }
 })
 
-// Get Categories
-app.get('/categories', async (req, res) => {
+// Update Category
+app.put('/categories/:id', checkToken, checkAdmin, async (req, res) => {
   try {
-    const categories = await Category.find()
-    return res.status(200).json(categories)
+    const { name } = req.body
+
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ msg: 'Nome da categoria é obrigatório' })
+    }
+
+    const category = await Category.findByIdAndUpdate(
+      req.params.id,
+      { name },
+      { new: true }
+    )
+
+    if (!category) {
+      return res.status(404).json({ msg: 'Categoria não encontrada' })
+    }
+
+    return res.status(200).json({ msg: 'Categoria atualizada', category })
   } catch (error) {
     console.log(error)
-    return res.status(500).json({ msg: 'Erro ao buscar categorias!' })
+    return res.status(500).json({ msg: 'Erro ao atualizar categoria' })
   }
 })
 
@@ -850,6 +876,63 @@ app.post(
     } catch (error) {
       console.log(error)
       return res.status(500).json({ msg: 'Erro ao cadastrar produto' })
+    }
+  }
+)
+
+// Update Product
+app.put(
+  '/products/:id',
+  checkToken,
+  checkAdmin,
+  upload.single('image'),
+  async (req, res) => {
+    try {
+      const { name, description, price, quantity, category } = req.body
+
+      const updates = {}
+
+      if (name) updates.name = name
+      if (description) updates.description = description
+      if (price) updates.price = price
+      if (quantity < 0) {
+        return res.status(400).json({ msg: 'Quantidade não pode ser negativa' })
+      }
+      if (quantity !== undefined) updates.quantity = quantity
+
+      if (category) {
+        const categoryExists = await Category.findById(category)
+        if (!categoryExists) {
+          return res.status(404).json({ msg: 'Categoria não encontrada' })
+        }
+        updates.category = category
+      }
+
+      if (req.file) {
+        const imageId = await uploadToGridFS(
+          req.file.buffer,
+          req.file.originalname,
+          req.file.mimetype
+        )
+        updates.image = imageId.toString()
+      }
+
+      const updatedProduct = await Product.findByIdAndUpdate(
+        req.params.id,
+        updates,
+        { new: true }
+      )
+
+      if (!updatedProduct) {
+        return res.status(404).json({ msg: 'Produto não encontrado' })
+      }
+
+      return res
+        .status(200)
+        .json({ msg: 'Produto atualizado com sucesso', updatedProduct })
+    } catch (error) {
+      console.log(error)
+      return res.status(500).json({ msg: 'Erro ao atualizar produto' })
     }
   }
 )
