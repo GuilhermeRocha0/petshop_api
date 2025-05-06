@@ -415,10 +415,6 @@ app.get('/pets', checkToken, async (req, res) => {
   try {
     const pets = await Pet.find({ userId })
 
-    if (!pets || pets.length === 0) {
-      return res.status(404).json({ msg: 'Nenhum pet encontrado!' })
-    }
-
     return res.status(200).json({ pets })
   } catch (error) {
     console.log(error)
@@ -605,18 +601,11 @@ app.get(
 // Show User Appointments
 app.get('/appointments', checkToken, async (req, res) => {
   try {
-    const appointments = await Appointment.find({ userId: req.userId }).sort({
-      scheduledDate: 1
-    })
-
-    if (appointments.length === 0) {
-      return res.status(404).json({ msg: 'Nenhum agendamento encontrado!' })
-    }
-
+    const appointments = await Appointment.find({ userId: req.userId })
     return res.status(200).json({ appointments })
   } catch (error) {
-    console.log(error)
-    return res.status(500).json({ msg: 'Erro ao buscar agendamentos!' })
+    console.error(error)
+    return res.status(500).json({ msg: 'Erro ao carregar agendamentos.' })
   }
 })
 
