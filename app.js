@@ -378,10 +378,14 @@ app.post('/pets/register', checkToken, async (req, res) => {
   const { name, size, age, breed, notes } = req.body
   const userId = req.userId
 
-  if (!name || !size || !age || !breed) {
+  if (!name || !size || typeof age !== 'number' || isNaN(age) || !breed) {
     return res
       .status(422)
       .json({ msg: 'Todos os campos obrigatórios devem ser preenchidos!' })
+  }
+
+  if (age < 0) {
+    return res.status(422).json({ msg: 'Idade inválida!' })
   }
 
   if (!['pequeno', 'médio', 'grande'].includes(size)) {
@@ -428,10 +432,14 @@ app.put('/pets/:id/edit', checkToken, async (req, res) => {
   const userId = req.userId
   const { name, size, age, breed, notes } = req.body
 
-  if (!name || !size || !age || !breed) {
+  if (!name || !size || isNaN(age) || !breed) {
     return res
       .status(422)
       .json({ msg: 'Todos os campos obrigatórios devem ser preenchidos!' })
+  }
+
+  if (age < 0) {
+    return res.status(422).json({ msg: 'Idade inválida!' })
   }
 
   if (!['pequeno', 'médio', 'grande'].includes(size)) {
