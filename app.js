@@ -403,6 +403,12 @@ app.post('/pets/register', checkToken, async (req, res) => {
     notes
   })
 
+    const existingPet = await Pet.findOne({ name, userId })
+
+    if (existingPet) {
+      return res.status(400).json({ msg: 'Você já cadastrou um pet com esse nome.' })
+    }
+  
   try {
     await pet.save()
     res.status(201).json({ msg: 'Pet cadastrado com sucesso!', pet })
