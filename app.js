@@ -48,10 +48,13 @@ app.get('/user/:id', checkToken, (req, res) => {
   // check if user exists
   User.findById(id, '-password')
     .then(user => {
+      if (!user) {
+        return res.status(404).json({ msg: 'Usuário não encontrado!' })
+      }
       return res.status(200).json({ user })
     })
     .catch(error => {
-      return res.status(404).json({ msg: 'Usuário não encontrado!' })
+      return res.status(500).json({ msg: 'Erro no servidor!' })
     })
 })
 
@@ -136,7 +139,6 @@ app.post('/auth/register', async (req, res) => {
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body
 
-  // validations
   if (!email) {
     return res.status(422).json({ msg: 'O email é obrigatório!' })
   }
@@ -145,34 +147,33 @@ app.post('/auth/login', async (req, res) => {
     return res.status(422).json({ msg: 'A senha é obrigatória!' })
   }
 
-  // check if user exists
-  const user = await User.findOne({ email: email })
-  if (!user) {
-    return res.status(404).json({ msg: 'Usuário não encontrado!' })
-  }
-
-  // check if password match
-  const checkPassword = await bcrypt.compare(password, user.password)
-  if (!checkPassword) {
-    return res.status(404).json({ msg: 'Senha inválida!' })
-  }
-
   try {
-    const secret = process.env.SECRET
+    const user = await User.findOne({ email })
 
-    const token = jwt.sign(
-      { id: user._id },
-      secret,
-      { expiresIn: '1h' } // token expira em 1 hora
-    )
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuário não encontrado!' })
+    }
 
-    res.status(200).json({ msg: 'Autenticação realizada com sucesso!', token })
+    const checkPassword = await bcrypt.compare(password, user.password)
+    if (!checkPassword) {
+      return res.status(404).json({ msg: 'Senha inválida!' })
+    }
+
+    const token = jwt.sign({ id: user._id }, process.env.SECRET, {
+      expiresIn: '1h'
+    })
+
+    return res.status(200).json({
+      msg: 'Autenticação realizada com sucesso!',
+      token,
+      user: {
+        id: user._id,
+        role: user.role
+      }
+    })
   } catch (error) {
     console.log(error)
-
-    res
-      .status(500)
-      .json({ msg: 'Ocorreu um erro no servidor, tente novamente mais tarde!' })
+    return res.status(500).json({ msg: 'Erro no servidor!' })
   }
 })
 
@@ -403,12 +404,14 @@ app.post('/pets/register', checkToken, async (req, res) => {
     notes
   })
 
-    const existingPet = await Pet.findOne({ name, userId })
+  const existingPet = await Pet.findOne({ name, userId })
 
-    if (existingPet) {
-      return res.status(400).json({ msg: 'Você já cadastrou um pet com esse nome.' })
-    }
-  
+  if (existingPet) {
+    return res
+      .status(400)
+      .json({ msg: 'Você já cadastrou um pet com esse nome.' })
+  }
+
   try {
     await pet.save()
     res.status(201).json({ msg: 'Pet cadastrado com sucesso!', pet })
@@ -680,26 +683,32 @@ app.post('/appointments', checkToken, async (req, res) => {
       status: 'pendente' // Status padrão
     })
 
-    await appointment.save();
+    await appointment.save()
 
     // Envia e-mail automático
-    const user = await User.findById(req.userId);
+    const user = await User.findById(req.userId)
     if (user && user.email) {
-      const serviceList = fixedServices.map(s => `<li>${s.name} - R$${s.price.toFixed(2)}</li>`).join('');
+      const serviceList = fixedServices
+        .map(s => `<li>${s.name} - R$${s.price.toFixed(2)}</li>`)
+        .join('')
 
       await sendEmail(
         user.email,
         '📅 Agendamento confirmado - PetDaCarla',
         `
           <p>Olá ${user.name}! Como vai?</p>
-          <p>Seu agendamento para o <strong>${pet.name}</strong> foi confirmado com sucesso!</p>
-          <p><strong>Data:</strong> ${new Date(scheduledDate).toLocaleString('pt-BR')}</p>
+          <p>Seu agendamento para o <strong>${
+            pet.name
+          }</strong> foi confirmado com sucesso!</p>
+          <p><strong>Data:</strong> ${new Date(scheduledDate).toLocaleString(
+            'pt-BR'
+          )}</p>
           <p><strong>Serviço contratado:</strong></p>
           <ul>${serviceList}</ul>
           <p><strong>Preço total:</strong> R$${totalPrice.toFixed(2)}</p>
           <p>Obrigado por escolher o PetDaCarla! Seu cachorrinho vai te agradecer com muitas lambidas! 🐶</p>
         `
-      );
+      )
     }
     return res
       .status(201)
@@ -743,18 +752,30 @@ app.put('/appointments/cancel/:id', checkToken, async (req, res) => {
 
     const emailHTML = `
       <p>Olá ${user.name}! Como vai?</p>
-      <p>Seu agendamento para o <strong>${appointment.pet.name}</strong> foi <strong>cancelado</strong>.</p>
-      <p><strong>Data originalmente agendada:</strong> ${new Date(appointment.scheduledDate).toLocaleString('pt-BR')}</p>
+      <p>Seu agendamento para o <strong>${
+        appointment.pet.name
+      }</strong> foi <strong>cancelado</strong>.</p>
+      <p><strong>Data originalmente agendada:</strong> ${new Date(
+        appointment.scheduledDate
+      ).toLocaleString('pt-BR')}</p>
       <p><strong>Serviço cancelado:</strong></p>
       <ul>
-        ${appointment.services.map(s => `<li>${s.name} - R$${s.price.toFixed(2)}</li>`).join('')}
+        ${appointment.services
+          .map(s => `<li>${s.name} - R$${s.price.toFixed(2)}</li>`)
+          .join('')}
       </ul>
-      <p><strong>Preço total:</strong> R$${appointment.totalPrice.toFixed(2)}</p>
+      <p><strong>Preço total:</strong> R$${appointment.totalPrice.toFixed(
+        2
+      )}</p>
       <p>Se foi um engano, entre em contato conosco para reagendar.</p>
       <p>Atenciosamente,<br>PetDaCarla 🐾</p>
     `
 
-    await sendEmail(user.email, '❌ Agendamento cancelado - PetDaCarla', emailHTML)
+    await sendEmail(
+      user.email,
+      '❌ Agendamento cancelado - PetDaCarla',
+      emailHTML
+    )
 
     return res
       .status(200)
