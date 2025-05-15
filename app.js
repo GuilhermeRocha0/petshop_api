@@ -719,13 +719,21 @@ app.post('/appointments', checkToken, async (req, res) => {
 // Cancel Appointment
 app.put('/appointments/cancel/:id', checkToken, async (req, res) => {
   const appointmentId = req.params.id
+  const user = await User.findById(req.userId)
 
   try {
-    // Verifica se o agendamento existe e pertence ao usuário
-    const appointment = await Appointment.findOne({
-      _id: appointmentId,
-      userId: req.userId
-    })
+    let appointment
+
+    // Se for ADMIN, pode cancelar qualquer agendamento
+    if (user.role === 'ADMIN') {
+      appointment = await Appointment.findById(appointmentId)
+    } else {
+      // Se não for ADMIN, só pode cancelar seus próprios agendamentos
+      appointment = await Appointment.findOne({
+        _id: appointmentId,
+        userId: req.userId
+      })
+    }
 
     if (!appointment) {
       return res.status(404).json({
@@ -744,35 +752,37 @@ app.put('/appointments/cancel/:id', checkToken, async (req, res) => {
     appointment.status = 'cancelado'
     await appointment.save()
 
-    // Envia e-mail de cancelamento
-    const user = await User.findById(req.userId)
+    // Envia e-mail de cancelamento para o usuário que realizou o agendamento
+    const appointmentOwner = await User.findById(appointment.userId)
 
-    const emailHTML = `
-      <p>Olá ${user.name}! Como vai?</p>
-      <p>Seu agendamento para o <strong>${
-        appointment.pet.name
-      }</strong> foi <strong>cancelado</strong>.</p>
-      <p><strong>Data originalmente agendada:</strong> ${new Date(
-        appointment.scheduledDate
-      ).toLocaleString('pt-BR')}</p>
-      <p><strong>Serviço cancelado:</strong></p>
-      <ul>
-        ${appointment.services
-          .map(s => `<li>${s.name} - R$${s.price.toFixed(2)}</li>`)
-          .join('')}
-      </ul>
-      <p><strong>Preço total:</strong> R$${appointment.totalPrice.toFixed(
-        2
-      )}</p>
-      <p>Se foi um engano, entre em contato conosco para reagendar.</p>
-      <p>Atenciosamente,<br>PetDaCarla 🐾</p>
-    `
+    if (appointmentOwner && appointmentOwner.email) {
+      const emailHTML = `
+        <p>Olá ${appointmentOwner.name}! Como vai?</p>
+        <p>Seu agendamento para o <strong>${
+          appointment.pet.name
+        }</strong> foi <strong>cancelado</strong>.</p>
+        <p><strong>Data originalmente agendada:</strong> ${new Date(
+          appointment.scheduledDate
+        ).toLocaleString('pt-BR')}</p>
+        <p><strong>Serviço cancelado:</strong></p>
+        <ul>
+          ${appointment.services
+            .map(s => `<li>${s.name} - R$${s.price.toFixed(2)}</li>`)
+            .join('')}
+        </ul>
+        <p><strong>Preço total:</strong> R$${appointment.totalPrice.toFixed(
+          2
+        )}</p>
+        <p>Se foi um engano, entre em contato conosco para reagendar.</p>
+        <p>Atenciosamente,<br>PetDaCarla 🐾</p>
+      `
 
-    await sendEmail(
-      user.email,
-      '❌ Agendamento cancelado - PetDaCarla',
-      emailHTML
-    )
+      await sendEmail(
+        appointmentOwner.email,
+        '❌ Agendamento cancelado - PetDaCarla',
+        emailHTML
+      )
+    }
 
     return res
       .status(200)
