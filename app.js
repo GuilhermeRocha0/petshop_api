@@ -595,25 +595,22 @@ app.delete('/services/:id', checkToken, checkAdmin, async (req, res) => {
 })
 
 // Show All Appointments
-app.get(
-  '/appointments/all',
-  checkToken,
-  checkAdminOrEmployee,
-  async (req, res) => {
-    try {
-      const appointments = await Appointment.find().sort({ scheduledDate: 1 })
+app.get('/appointments/all', checkToken, checkAdmin, async (req, res) => {
+  try {
+    const appointments = await Appointment.find()
+      .sort({ scheduledDate: 1 })
+      .populate('userId', 'name email')
 
-      if (appointments.length === 0) {
-        return res.status(404).json({ msg: 'Nenhum agendamento encontrado!' })
-      }
-
-      return res.status(200).json({ appointments })
-    } catch (error) {
-      console.log(error)
-      return res.status(500).json({ msg: 'Erro ao buscar agendamentos!' })
+    if (appointments.length === 0) {
+      return res.status(404).json({ msg: 'Nenhum agendamento encontrado!' })
     }
+
+    return res.status(200).json({ appointments })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao buscar agendamentos!' })
   }
-)
+})
 
 // Show User Appointments
 app.get('/appointments', checkToken, async (req, res) => {
@@ -790,7 +787,7 @@ app.put('/appointments/cancel/:id', checkToken, async (req, res) => {
 app.put(
   '/appointments/status/:id',
   checkToken,
-  checkAdminOrEmployee,
+  checkAdmin,
   async (req, res) => {
     const appointmentId = req.params.id
     const { status } = req.body
