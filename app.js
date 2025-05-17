@@ -612,6 +612,28 @@ app.get('/appointments/all', checkToken, checkAdmin, async (req, res) => {
   }
 })
 
+// Get appointment by ID
+app.get('/appointments/:id', checkToken, async (req, res) => {
+  const appointmentId = req.params.id
+
+  try {
+    // Busca o agendamento pelo ID e pelo userId para garantir segurança
+    const appointment = await Appointment.findOne({
+      _id: appointmentId,
+      userId: req.userId
+    })
+
+    if (!appointment) {
+      return res.status(404).json({ msg: 'Agendamento não encontrado!' })
+    }
+
+    return res.status(200).json({ appointment })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Erro ao buscar o agendamento.' })
+  }
+})
+
 // Show User Appointments
 app.get('/appointments', checkToken, async (req, res) => {
   try {
@@ -793,7 +815,7 @@ app.put('/appointments/cancel/:id', checkToken, async (req, res) => {
   }
 })
 
-// Update Appointment status (ADMIN or EMPLOYEE only)
+// Update Appointment status (ADMIN only)
 app.put(
   '/appointments/status/:id',
   checkToken,
