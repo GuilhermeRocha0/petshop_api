@@ -641,6 +641,7 @@ app.get('/appointments', checkToken, async (req, res) => {
 // Register Appointment
 app.post('/appointments', checkToken, async (req, res) => {
   const { petId, serviceIds, scheduledDate } = req.body
+  console.log('Body recebido:', req.body)
 
   if (!petId || !serviceIds || !scheduledDate) {
     return res
@@ -649,13 +650,11 @@ app.post('/appointments', checkToken, async (req, res) => {
   }
 
   try {
-    // Valida o pet
     const pet = await Pet.findOne({ _id: petId, userId: req.userId })
     if (!pet) {
       return res.status(404).json({ msg: 'Pet não encontrado!' })
     }
 
-    // Busca os serviços selecionados
     const services = await Service.find({ _id: { $in: serviceIds } })
     if (services.length !== serviceIds.length) {
       return res
@@ -663,21 +662,68 @@ app.post('/appointments', checkToken, async (req, res) => {
         .json({ msg: 'Um ou mais serviços não encontrados!' })
     }
 
-    // Calcula o total de preço e tempo
+    const date = new Date(scheduledDate)
+    const now = new Date()
+
+    if (date <= now) {
+      return res.status(400).json({ msg: 'Data e horário devem ser futuros!' })
+    }
+
+    const minutes = date.getMinutes()
+    if (minutes % 15 !== 0) {
+      return res
+        .status(400)
+        .json({ msg: 'Horário deve ser em intervalos de 15 minutos!' })
+    }
+
+    const hours = date.getHours()
+    if (hours < 8 || hours >= 17) {
+      return res
+        .status(400)
+        .json({ msg: 'Agendamento deve estar entre 08:00 e 17:00!' })
+    }
+
+    const dayOfWeek = date.getDay()
+    if (dayOfWeek === 0) {
+      return res
+        .status(400)
+        .json({ msg: 'Não é permitido agendar aos domingos!' })
+    }
+
     const totalPrice = services.reduce((acc, s) => acc + s.price, 0)
     const totalEstimatedTime = services.reduce(
       (acc, s) => acc + s.estimatedTime,
       0
     )
 
-    // Cria a lista de serviços para o agendamento
+    const appointmentStart = date.getTime()
+    const appointmentEnd = appointmentStart + totalEstimatedTime * 60000
+
+    const conflictingAppointments = await Appointment.find({
+      status: { $ne: 'cancelado' },
+      $or: [
+        {
+          scheduledDate: {
+            $lt: new Date(appointmentEnd),
+            $gte: new Date(appointmentStart)
+          }
+        }
+      ]
+    })
+
+    if (conflictingAppointments.length > 0) {
+      return res
+        .status(400)
+        .json({ msg: 'Já existe um agendamento nesse horário!' })
+    }
+
     const fixedServices = services.map(s => ({
+      serviceId: s._id,
       name: s.name,
       price: s.price,
       estimatedTime: s.estimatedTime
     }))
 
-    // Cria o agendamento com o status padrão "pendente"
     const appointment = new Appointment({
       userId: req.userId,
       pet: {
@@ -689,10 +735,10 @@ app.post('/appointments', checkToken, async (req, res) => {
         notes: pet.notes
       },
       services: fixedServices,
-      scheduledDate,
+      scheduledDate: date,
       totalPrice,
       totalEstimatedTime,
-      status: 'pendente' // Status padrão
+      status: 'pendente'
     })
 
     await appointment.save()
@@ -712,9 +758,7 @@ app.post('/appointments', checkToken, async (req, res) => {
           <p>Seu agendamento para o <strong>${
             pet.name
           }</strong> foi confirmado com sucesso!</p>
-          <p><strong>Data:</strong> ${new Date(scheduledDate).toLocaleString(
-            'pt-BR'
-          )}</p>
+          <p><strong>Data:</strong> ${date.toLocaleString('pt-BR')}</p>
           <p><strong>Serviço contratado:</strong></p>
           <ul>${serviceList}</ul>
           <p><strong>Preço total:</strong> R$${totalPrice.toFixed(2)}</p>
@@ -722,12 +766,13 @@ app.post('/appointments', checkToken, async (req, res) => {
         `
       )
     }
+
     return res
       .status(201)
-      .json({ msg: 'Agendamento realizado com sucesso!', appointment })
+      .json({ msg: 'Agendamento criado com sucesso!', appointment })
   } catch (error) {
-    console.log(error)
-    return res.status(500).json({ msg: 'Erro ao realizar o agendamento!' })
+    console.error(error)
+    return res.status(500).json({ msg: 'Erro ao criar agendamento!' })
   }
 })
 
