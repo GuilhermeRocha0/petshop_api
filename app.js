@@ -532,10 +532,6 @@ app.get('/services', async (req, res) => {
   try {
     const services = await Service.find()
 
-    if (!services || services.length === 0) {
-      return res.status(404).json({ msg: 'Nenhum serviço encontrado!' })
-    }
-
     return res.status(200).json({ services })
   } catch (error) {
     console.log(error)
@@ -594,17 +590,14 @@ app.delete('/services/:id', checkToken, checkAdmin, async (req, res) => {
   }
 })
 
-// Show All Appointments
+// Show All Appointments (admin)
 app.get('/appointments/all', checkToken, checkAdmin, async (req, res) => {
   try {
     const appointments = await Appointment.find()
       .sort({ scheduledDate: 1 })
       .populate('userId', 'name email')
 
-    if (appointments.length === 0) {
-      return res.status(404).json({ msg: 'Nenhum agendamento encontrado!' })
-    }
-
+    // Retorna sempre a lista (mesmo que vazia)
     return res.status(200).json({ appointments })
   } catch (error) {
     console.log(error)
