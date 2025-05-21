@@ -159,16 +159,17 @@ app.post('/auth/login', async (req, res) => {
       return res.status(404).json({ msg: 'Senha inválida!' })
     }
 
-    // ✅ Adicionado role no payload
-    const token = jwt.sign(
-      { id: user._id, role: user.role },
-      process.env.SECRET,
-      { expiresIn: '1h' }
-    )
+    const token = jwt.sign({ id: user._id }, process.env.SECRET, {
+      expiresIn: '1h'
+    })
 
     return res.status(200).json({
       msg: 'Autenticação realizada com sucesso!',
-      token
+      token,
+      user: {
+        id: user._id,
+        role: user.role
+      }
     })
   } catch (error) {
     console.log(error)
