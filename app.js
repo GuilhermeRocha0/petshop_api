@@ -159,17 +159,16 @@ app.post('/auth/login', async (req, res) => {
       return res.status(404).json({ msg: 'Senha inválida!' })
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.SECRET, {
-      expiresIn: '1h'
-    })
+    // ✅ Adicionado role no payload
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.SECRET,
+      { expiresIn: '1h' }
+    )
 
     return res.status(200).json({
       msg: 'Autenticação realizada com sucesso!',
-      token,
-      user: {
-        id: user._id,
-        role: user.role
-      }
+      token
     })
   } catch (error) {
     console.log(error)
@@ -971,11 +970,9 @@ app.delete('/categories/:id', checkToken, checkAdmin, async (req, res) => {
       category: categoryId
     })
     if (productsUsingCategory) {
-      return res
-        .status(400)
-        .json({
-          msg: 'Não é possível deletar categoria que está em uso por produtos'
-        })
+      return res.status(400).json({
+        msg: 'Não é possível deletar categoria que está em uso por produtos'
+      })
     }
 
     // Deleta a categoria
