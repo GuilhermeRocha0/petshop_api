@@ -955,6 +955,39 @@ app.put('/categories/:id', checkToken, checkAdmin, async (req, res) => {
   }
 })
 
+// Delete Category by ID
+app.delete('/categories/:id', checkToken, checkAdmin, async (req, res) => {
+  try {
+    const categoryId = req.params.id
+
+    // Verifica se a categoria existe
+    const category = await Category.findById(categoryId)
+    if (!category) {
+      return res.status(404).json({ msg: 'Categoria não encontrada' })
+    }
+
+    // Opcional: verificar se algum produto está vinculado a essa categoria
+    const productsUsingCategory = await Product.findOne({
+      category: categoryId
+    })
+    if (productsUsingCategory) {
+      return res
+        .status(400)
+        .json({
+          msg: 'Não é possível deletar categoria que está em uso por produtos'
+        })
+    }
+
+    // Deleta a categoria
+    await Category.findByIdAndDelete(categoryId)
+
+    return res.status(200).json({ msg: 'Categoria deletada com sucesso' })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao deletar categoria' })
+  }
+})
+
 // Register Product
 app.post(
   '/products',
@@ -1065,6 +1098,27 @@ app.put(
     }
   }
 )
+
+// Delete Product
+app.delete('/products/:id', checkToken, checkAdmin, async (req, res) => {
+  try {
+    const productId = req.params.id
+
+    // Tenta deletar o produto pelo id
+    const deletedProduct = await Product.findByIdAndDelete(productId)
+
+    if (!deletedProduct) {
+      return res.status(404).json({ msg: 'Produto não encontrado' })
+    }
+
+    // Se quiser, pode remover a imagem do GridFS aqui (se tiver lógica para isso)
+
+    return res.status(200).json({ msg: 'Produto deletado com sucesso' })
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ msg: 'Erro ao deletar produto' })
+  }
+})
 
 // Get Product Image
 app.get('/products/image/:id', async (req, res) => {
