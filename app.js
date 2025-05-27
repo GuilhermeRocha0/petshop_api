@@ -1224,6 +1224,22 @@ app.post('/order-reservation', checkToken, async (req, res) => {
           .json({ msg: `Produto com ID ${item.productId} não encontrado.` })
       }
 
+      if (item.quantity > 5) {
+        return res.status(400).json({
+          msg: `Não é permitido pedir mais de 5 unidades do produto ${product.name}.`
+        })
+      }
+
+      if (item.quantity > product.quantity) {
+        return res.status(400).json({
+          msg: `Estoque insuficiente para o produto ${product.name}. Disponível: ${product.quantity}`
+        })
+      }
+
+      // Atualiza estoque
+      product.quantity -= item.quantity
+      await product.save()
+
       const itemTotal = product.price * item.quantity
       totalAmount += itemTotal
 
@@ -1307,6 +1323,15 @@ app.put('/order-reservation/cancel/:id', checkToken, async (req, res) => {
 
     if (reservation.status === 'cancelado') {
       return res.status(400).json({ msg: 'Reserva já está cancelada.' })
+    }
+
+    // Devolve as quantidades ao estoque
+    for (const item of reservation.items) {
+      const product = await Product.findById(item.productId)
+      if (product) {
+        product.quantity += item.quantity
+        await product.save()
+      }
     }
 
     reservation.status = 'cancelado'
