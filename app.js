@@ -21,6 +21,7 @@ const Appointment = require('./models/Appointment')
 const PasswordResetToken = require('./models/PasswordResetToken')
 const Category = require('./models/Category')
 const Product = require('./models/Product')
+const OrderReservation = require('./models/OrderReservation')
 
 // Utilites
 const isValidCPF = require('./utilities/isValidCPF')
@@ -1194,6 +1195,146 @@ app.get('/products/:id', async (req, res) => {
     return res.status(500).json({ msg: 'Erro ao buscar produto' })
   }
 })
+
+// Create Order (Reservation)
+app.post('/order-reservation', checkToken, async (req, res) => {
+  try {
+    const userId = req.userId
+    const { items } = req.body
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res
+        .status(400)
+        .json({ msg: 'Nenhum item informado para o pedido.' })
+    }
+
+    const user = await User.findById(userId)
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuário não encontrado.' })
+    }
+
+    let totalAmount = 0
+    const detailedItems = []
+
+    for (const item of items) {
+      const product = await Product.findById(item.productId)
+      if (!product) {
+        return res
+          .status(404)
+          .json({ msg: `Produto com ID ${item.productId} não encontrado.` })
+      }
+
+      const itemTotal = product.price * item.quantity
+      totalAmount += itemTotal
+
+      detailedItems.push({
+        productId: product._id,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        quantity: item.quantity
+      })
+    }
+
+    const newReservation = new OrderReservation({
+      user: {
+        name: user.name,
+        email: user.email,
+        cpf: user.cpf
+      },
+      items: detailedItems,
+      totalAmount,
+      validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // +7 dias
+    })
+
+    await newReservation.save()
+
+    res
+      .status(201)
+      .json({ msg: 'Reserva criada com sucesso.', reservation: newReservation })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ msg: 'Erro ao criar reserva.' })
+  }
+})
+
+// Get All User Orders
+app.get('/order-reservation', checkToken, async (req, res) => {
+  try {
+    const userId = req.userId
+    const user = await User.findById(userId)
+
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuário não encontrado.' })
+    }
+
+    const reservations = await OrderReservation.find({
+      'user.email': user.email
+    })
+
+    const now = new Date()
+
+    for (let reservation of reservations) {
+      if (reservation.status === 'pendente' && reservation.validUntil < now) {
+        reservation.status = 'cancelado'
+        await reservation.save()
+      }
+    }
+
+    res.status(200).json({ reservations })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ msg: 'Erro ao buscar reservas.' })
+  }
+})
+
+// Cancel Order
+app.put('/order-reservation/cancel/:id', checkToken, async (req, res) => {
+  try {
+    const userId = req.userId
+    const reservationId = req.params.id
+
+    const reservation = await OrderReservation.findById(reservationId)
+
+    if (!reservation) {
+      return res.status(404).json({ msg: 'Reserva não encontrada.' })
+    }
+
+    const user = await User.findById(userId)
+    if (!user || reservation.user.email !== user.email) {
+      return res.status(403).json({ msg: 'Acesso negado.' })
+    }
+
+    if (reservation.status === 'cancelado') {
+      return res.status(400).json({ msg: 'Reserva já está cancelada.' })
+    }
+
+    reservation.status = 'cancelado'
+    await reservation.save()
+
+    res.status(200).json({ msg: 'Reserva cancelada com sucesso.', reservation })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ msg: 'Erro ao cancelar reserva.' })
+  }
+})
+
+// Admin - Get All Reservations
+app.get(
+  '/admin/order-reservations',
+  checkToken,
+  checkAdmin,
+  async (req, res) => {
+    try {
+      const reservations = await OrderReservation.find().sort({ createdAt: -1 })
+
+      res.status(200).json({ reservations })
+    } catch (error) {
+      console.error(error)
+      res.status(500).json({ msg: 'Erro ao buscar todas as reservas.' })
+    }
+  }
+)
 
 // Credentials
 const dbUser = process.env.DB_USER
