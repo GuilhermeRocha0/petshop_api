@@ -628,6 +628,27 @@ app.get('/appointments/:id', checkToken, async (req, res) => {
   }
 })
 
+// Get appointment by ID (ADMIN)
+app.get('/appointments/admin/:id', checkToken, checkAdmin, async (req, res) => {
+  const appointmentId = req.params.id
+
+  try {
+    const appointment = await Appointment.findById(appointmentId).populate(
+      'userId',
+      'name email'
+    )
+
+    if (!appointment) {
+      return res.status(404).json({ msg: 'Agendamento não encontrado!' })
+    }
+
+    return res.status(200).json({ appointment })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ msg: 'Erro ao buscar o agendamento.' })
+  }
+})
+
 // Show User Appointments
 app.get('/appointments', checkToken, async (req, res) => {
   try {
@@ -1357,6 +1378,40 @@ app.get(
     } catch (error) {
       console.error(error)
       res.status(500).json({ msg: 'Erro ao buscar todas as reservas.' })
+    }
+  }
+)
+
+// Update Order Status (Admin)
+app.put(
+  '/admin/order-reservation/status/:id',
+  checkToken,
+  checkAdmin,
+  async (req, res) => {
+    try {
+      const reservationId = req.params.id
+      const { status } = req.body
+
+      const allowedStatuses = ['pendente', 'concluído', 'cancelado']
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({ msg: 'Status inválido.' })
+      }
+
+      const reservation = await OrderReservation.findById(reservationId)
+
+      if (!reservation) {
+        return res.status(404).json({ msg: 'Reserva não encontrada.' })
+      }
+
+      reservation.status = status
+      await reservation.save()
+
+      res
+        .status(200)
+        .json({ msg: 'Status atualizado com sucesso.', reservation })
+    } catch (error) {
+      console.error(error)
+      res.status(500).json({ msg: 'Erro ao atualizar status da reserva.' })
     }
   }
 )
