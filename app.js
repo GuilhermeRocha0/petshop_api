@@ -1325,6 +1325,20 @@ app.get('/order-reservation', checkToken, async (req, res) => {
   }
 })
 
+// Get Order by ID
+app.get('/order-reservation/:id', checkToken, async (req, res) => {
+  try {
+    const reservation = await OrderReservation.findById(req.params.id)
+    if (!reservation) {
+      return res.status(404).json({ msg: 'Reserva não encontrada.' })
+    }
+    res.status(200).json({ reservation })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ msg: 'Erro ao buscar reserva.' })
+  }
+})
+
 // Cancel Order
 app.put('/order-reservation/cancel/:id', checkToken, async (req, res) => {
   try {
@@ -1384,7 +1398,7 @@ app.get(
 
 // Update Order Status (Admin)
 app.put(
-  '/admin/order-reservation/status/:id',
+  '/order-reservation/status/:id',
   checkToken,
   checkAdmin,
   async (req, res) => {
