@@ -1286,6 +1286,31 @@ app.post('/order-reservation', checkToken, async (req, res) => {
 
     await newReservation.save()
 
+    await sendEmail(
+      user.email,
+      '✅ Reserva de pedido confirmada - PetDaCarla',
+      `
+    <p>Olá ${user.name}!</p>
+    <p>Sua reserva foi realizada com sucesso.</p>
+    <p><strong>Itens reservados:</strong></p>
+    <ul>
+      ${detailedItems
+        .map(
+          item =>
+            `<li>${item.name} - ${item.quantity}x - R$${item.price.toFixed(
+              2
+            )}</li>`
+        )
+        .join('')}
+    </ul>
+    <p><strong>Valor total:</strong> R$${totalAmount.toFixed(2)}</p>
+    <p>Esta reserva é válida até: ${newReservation.validUntil.toLocaleDateString(
+      'pt-BR'
+    )}</p>
+    <p>Obrigado por comprar com o PetDaCarla! 🐾</p>
+  `
+    )
+
     res
       .status(201)
       .json({ msg: 'Reserva criada com sucesso.', reservation: newReservation })
@@ -1372,6 +1397,29 @@ app.put('/order-reservation/cancel/:id', checkToken, async (req, res) => {
     reservation.status = 'cancelado'
     await reservation.save()
 
+    await sendEmail(
+      reservation.user.email,
+      '❌ Reserva cancelada - PetDaCarla',
+      `
+    <p>Olá ${reservation.user.name}!</p>
+    <p>Sua reserva foi <strong>cancelada</strong> com sucesso.</p>
+    <p><strong>Itens cancelados:</strong></p>
+    <ul>
+      ${reservation.items
+        .map(
+          item =>
+            `<li>${item.name} - ${item.quantity}x - R$${item.price.toFixed(
+              2
+            )}</li>`
+        )
+        .join('')}
+    </ul>
+    <p><strong>Valor total:</strong> R$${reservation.totalAmount.toFixed(2)}</p>
+    <p>Se precisar de ajuda, entre em contato conosco.</p>
+    <p>Atenciosamente, PetDaCarla 🐾</p>
+  `
+    )
+
     res.status(200).json({ msg: 'Reserva cancelada com sucesso.', reservation })
   } catch (error) {
     console.error(error)
@@ -1411,7 +1459,9 @@ app.put(
         return res.status(400).json({ msg: 'Status inválido.' })
       }
 
-      const reservation = await OrderReservation.findById(reservationId)
+      const reservation = await OrderReservation.findById(
+        reservationId
+      ).populate('user')
 
       if (!reservation) {
         return res.status(404).json({ msg: 'Reserva não encontrada.' })
@@ -1419,6 +1469,58 @@ app.put(
 
       reservation.status = status
       await reservation.save()
+
+      // Envia email apenas para 'concluído' ou 'cancelado'
+      if (status === 'concluído') {
+        await sendEmail(
+          reservation.user.email,
+          `✅ Sua reserva foi concluída! - PetDaCarla`,
+          `
+            <p>Olá ${reservation.user.name}!</p>
+            <p>Temos o prazer de informar que a sua reserva foi <strong>concluída</strong> com sucesso! 🎉</p>
+            <p><strong>Itens da reserva:</strong></p>
+            <ul>
+              ${reservation.items
+                .map(
+                  item =>
+                    `<li>${item.name} - ${
+                      item.quantity
+                    }x - R$${item.price.toFixed(2)}</li>`
+                )
+                .join('')}
+            </ul>
+            <p><strong>Valor total:</strong> R$${reservation.totalAmount.toFixed(
+              2
+            )}</p>
+            <p>Obrigado por confiar no PetDaCarla! Esperamos vê-lo novamente em breve. 🐾</p>
+          `
+        )
+      } else if (status === 'cancelado') {
+        await sendEmail(
+          reservation.user.email,
+          `⚠️ Sua reserva foi cancelada - PetDaCarla`,
+          `
+            <p>Olá ${reservation.user.name}!</p>
+            <p>Lamentamos informar que a sua reserva foi <strong>cancelada</strong>. 😢</p>
+            <p><strong>Itens que estavam na reserva:</strong></p>
+            <ul>
+              ${reservation.items
+                .map(
+                  item =>
+                    `<li>${item.name} - ${
+                      item.quantity
+                    }x - R$${item.price.toFixed(2)}</li>`
+                )
+                .join('')}
+            </ul>
+            <p><strong>Valor total:</strong> R$${reservation.totalAmount.toFixed(
+              2
+            )}</p>
+            <p>Se tiver alguma dúvida ou quiser reagendar, entre em contato conosco.</p>
+            <p>Atenciosamente, equipe PetDaCarla 🐾</p>
+          `
+        )
+      }
 
       res
         .status(200)
